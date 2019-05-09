@@ -5,6 +5,7 @@ import configparser
 import numpy as np
 import pandas as pd
 from opencage.geocoder import OpenCageGeocoder
+from datetime import datetime
 from event import Event
 
 # ConfigParser
@@ -18,14 +19,11 @@ os.environ['OPENCAGE_KEY'] = config['OPENCAGE']['KEY']
 # Initialize OpenCage Geocode
 geocode = OpenCageGeocoder(os.environ['OPENCAGE_KEY'])
 
-# Function for request events
-
-# function for request meetup API
-
 
 def request_event(topic, country=None, url_path):
     '''
-    Function that make a request to meetup api and return a json from all events filtered by topic and country
+    Function that make a request to meetup api and return a json with all events availables
+    filtered by topic and country
 
     Args:
         topic (string): Topic of the events
@@ -49,3 +47,13 @@ url_meetup_api = "https://api.meetup.com/2/open_events"
 list_events = request_event(topic="Python", country=None, url_meetup_api)
 # get data from json response
 data = list_events['results']
+
+### DATA FRAME ###
+# columns
+columns = ['id', 'date', 'year', 'month', 'day', 'country', 'address', 'meetup_name',
+           'meetup_group_name', 'description', 'event_url', 'yes_rsvp_count', 'status']
+id, date, year, month, day, country, address, meetup_name, \
+    meetup_group_name, description, event_url, yes_rsvp_count, status = ([] for i in range(13))
+
+for event in data:
+    date_event =
