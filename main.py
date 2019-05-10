@@ -134,8 +134,8 @@ def build_dataframe(spark, data):
     # Create Spark DataFrame
     df = spark.createDataFrame(df_pandas, schema=schema)
 
-    # # Upper lambda functions
-    # upper_udf = udf(lambda x: x.upper())
+    # Upper lambda functions
+    upper_udf = udf(lambda x: x.upper())
     #
     # # Remove tags from description column
     # @udf
@@ -145,7 +145,7 @@ def build_dataframe(spark, data):
     #     return TAG_RE.sub('', text)
     #
     # # Apply udf functions
-    # df = df.withColumn('country', upper_udf(df.country))
+    df = df.withColumn('country', upper_udf(df.country))
     # df = df.withColumn('description', remove_tags_udf(df.description))
 
     return df
@@ -168,4 +168,4 @@ if __name__ == '__main__':
     # Build dataframe
     df = build_dataframe(spark, data)
     # write data into mongodb cluster
-    write_data(df, spark)
+    # write_data(df, spark)
