@@ -3,7 +3,9 @@ import requests
 import configparser
 import numpy as np
 import pandas as pd
-from opencage.geocoder import OpenCageGeocoder
+import json
+import pymongo
+from opencage.geocoder import OpenCageGeocode
 from datetime import datetime
 from event import Event
 from pyspark.sql import SparkSession
@@ -19,21 +21,28 @@ config.read('config/meetup.cfg')
 # Environ variables for API KEY
 os.environ['MEETUP_API_KEY'] = config['MEETUP']['API_KEY']
 os.environ['OPENCAGE_KEY'] = config['OPENCAGE']['KEY']
+os.environ['MONGO_PASS'] = config['MONGODB']['PASS']
 
 # Initialize OpenCage Geocode
-geocode = OpenCageGeocoder(os.environ['OPENCAGE_KEY'])
+geocode = OpenCageGeocode(os.environ['OPENCAGE_KEY'])
+
+mongo_conn_str = "mongodb://mongoadmin:{}@dev-mongo-shard-00-00-klryn.mongodb.net:27017,dev-mongo-shard-00-01-klryn.mongodb.net:27017,dev-mongo-shard-00-02-klryn.mongodb.net:27017/test?ssl=true&replicaSet=dev-mongo-shard-0&authSource=admin&retryWrites=true".format(
+    os.environ['MONGO_PASS'])
 
 
 def spark_session():
     spark = SparkSession \
         .builder \
-        .config("spark.jars.packages", "org.apache.hadoop:hadoop-aws:2.7.5") \
+        .appName("meetupcollections") \
+        .config("spark.jars.packages", "org.mongodb.spark:mongo-spark-connector_2.12:2.4.0")\
+        .config("spark.mongodb.input.uri", mongo_conn_str) \
+        .config("spark.mongodb.output.uri", mongo_conn_str) \
         .getOrCreate()
 
     return spark
 
 
-def request_event(topic, country=None, url_path):
+def request_event(topic, country, url_path):
     '''
     Function that make a request to meetup api and return a json with all events availables
     filtered by topic and country
@@ -125,25 +134,27 @@ def build_dataframe(spark, data):
     # Create Spark DataFrame
     df = spark.createDataFrame(df_pandas, schema=schema)
 
+    # # Upper lambda functions
+    # upper_udf = udf(lambda x: x.upper())
+    #
+    # # Remove tags from description column
+    # @udf
+    # def remove_tags_udf(text):
+    #     import re
+    #     TAG_RE = re.compile(r'<[^>]+>')
+    #     return TAG_RE.sub('', text)
+    #
+    # # Apply udf functions
+    # df = df.withColumn('country', upper_udf(df.country))
+    # df = df.withColumn('description', remove_tags_udf(df.description))
+
     return df
 
 
-### DATA WRANGLING ###
+def write_data(df, spark):
 
-# Upper lambda functions
-upper_udf = F.udf(lambda x: x.upper())
-
-# Remove tags from description column
-@udf
-def remove_tags_udf(text):
-    import re
-    TAG_RE = re.compile(r'<[^>]+>')
-    return TAG_RE.sub('', text)
-
-
-# Apply udf functions
-df = df.withColumn('country', upper_udf(df.country))
-df = df.withColumn('description', remove_tags_udf(df.description))
+    df.write.format("com.mongodb.spark.sql.DefaultSource").mode("append").option(
+        "database", "meetup").option("collection", "events").save()
 
 
 if __name__ == '__main__':
@@ -153,6 +164,8 @@ if __name__ == '__main__':
     # url meetup request
     url_meetup_api = "https://api.meetup.com/2/open_events"
     # get list of events by topic and country
-    data = request_event(topic="Python", country=None, url_meetup_api)
+    data = request_event(topic="Python", country="US", url_path=url_meetup_api)
     # Build dataframe
     df = build_dataframe(spark, data)
+    # write data into mongodb cluster
+    write_data(df, spark)
