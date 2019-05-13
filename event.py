@@ -19,7 +19,7 @@ class Event():
         self.data = data
         self.geocode = geocode
 
-    def build_dataframe(self, *args, **kwargs):
+    def build_df(self, *args, **kwargs):
         '''
         Build a SparkDataframe based on json response.
         Args:
