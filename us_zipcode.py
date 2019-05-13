@@ -1,15 +1,21 @@
-from pyspark.sql import functions as F
-from pyspark.sql import types as T
-from pyspark.sql.functions import udf
+import pandas as pd
+import numpy as np
 
 
 class Zipcode():
 
-    def __init__(self, spark, csv_path):
-        self.spark = spark
+    def __init__(self, csv_path):
         self.csv_path = csv_path
 
     def build_df(self, *args, **kwargs):
 
-        df = self.spark.read.format('csv').option('header', 'true').load(self.csv_path)
+        df = pd.read_csv(self.csv_path, delimiter=';')
         return df
+
+    def create_list(self,
+                    df,
+                    *args,
+                    **kwargs):
+
+        list = df[['Zip', 'City', 'State']][df.State == 'NY'].drop_duplicates().values.tolist()
+        return list
