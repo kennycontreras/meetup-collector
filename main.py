@@ -1,17 +1,12 @@
 import os
 import requests
 import configparser
-import numpy as np
-import pandas as pd
 import json
 import pymongo
 from opencage.geocoder import OpenCageGeocode
-from datetime import datetime
 from event import Event
 from pyspark.sql import SparkSession
-from pyspark.sql import functions as F
-from pyspark.sql import types as T
-from pyspark.sql.functions import udf
+from us_zipcode import Zipcode
 
 # ConfigParser
 config = configparser.ConfigParser()
@@ -64,108 +59,22 @@ def request_event(topic, country, url_path):
     return data['results']
 
 
-def build_dataframe(spark, data):
-    '''
-    Build a SparkDataframe based on json response.
-    Args:
-        Spark (object): Spark Session
-        data (json array): Event data from meetup api
-
-    '''
-
-    # Columns to build data frame
-    columns = ['id', 'date', 'year', 'month', 'day', 'country', 'city', 'state,', 'address',
-               'meetup_name', 'meetup_group_name', 'description', 'event_url', 'yes_rsvp_count', 'status']
-    id, date, year, month, day, country, city, state, address, meetup_name, meetup_group_name, description, event_url, yes_rsvp_count, status = ([
-    ] for i in range(15))
-
-    # Iterate over events
-    for label in data:
-        date_event = datetime.fromtimestamp(label['time'] / 1000.0)
-
-        id.append(label['id'])
-        date.append(date_event)
-        year.append(date_event.year)
-        month.append(date_event.month)
-        day.append(date_event.year)
-
-        if label.get('venue'):
-            country.append(label['venue'].get('country'))
-            city.append(label['venue'].get('city'))
-            state.append(label['venue'].get('state'))
-            address.append(label['venue'].get('address_1'))
-        else:
-            location_json = geocode.reverse_geocode(
-                label['group'].get('group_lat'), label['group'].get('group_lon'))
-            country.append(location_json[0]['components'].get('country_code'))
-            city.append(location_json[0]['components'].get('city'))
-            state.append(location_json[0]['components'].get('state'))
-            address.append(location_json[0].get('formatted'))
-
-        meetup_name.append(label.get('name'))
-        meetup_group_name.append(label['group'].get('name'))
-        description.append(label.get('description'))
-        event_url.append(label['event_url'])
-        yes_rsvp_count.append(label.get('yes_rsvp_count'))
-        status.append(label.get('status'))
-
-    # Schema Structure
-    schema = T.StructType([
-        T.StructField("id", T.StringType(), True),
-        T.StructField("date", T.TimestampType(), True),
-        T.StructField("year", T.IntegerType(), True),
-        T.StructField("month", T.IntegerType(), True),
-        T.StructField("day", T.IntegerType(), True),
-        T.StructField("country", T.StringType(), True),
-        T.StructField("city", T.StringType(), True),
-        T.StructField("state", T.StringType(), True),
-        T.StructField("address", T.StringType(), True),
-        T.StructField("meetup_name", T.StringType(), True),
-        T.StructField("meetup_group_name", T.StringType(), True),
-        T.StructField("description", T.StringType(), True),
-        T.StructField("event_url", T.StringType(), True),
-        T.StructField("yes_rsvp_count", T.IntegerType(), True),
-        T.StructField("status", T.StringType(), True)
-    ])
-
-    # Create pandas DataFrame using numpy.transpose() method
-    df_pandas = pd.DataFrame(np.transpose([id, date, year, month, day, country, city, state, address,
-                                           meetup_name, meetup_group_name, description, event_url, yes_rsvp_count, status]), columns=columns)
-    # Create Spark DataFrame
-    df = spark.createDataFrame(df_pandas, schema=schema)
-
-    # Upper lambda functions
-    upper_udf = udf(lambda x: x.upper())
-    #
-    # # Remove tags from description column
-    # @udf
-    # def remove_tags_udf(text):
-    #     import re
-    #     TAG_RE = re.compile(r'<[^>]+>')
-    #     return TAG_RE.sub('', text)
-    #
-    # # Apply udf functions
-    df = df.withColumn('country', upper_udf(df.country))
-    # df = df.withColumn('description', remove_tags_udf(df.description))
-
-    return df
-
-
-def write_data(df, spark):
-
-    df.write.format("com.mongodb.spark.sql.DefaultSource").mode("append").option(
-        "database", "meetup").option("collection", "events").save()
-
-
 if __name__ == '__main__':
 
     # Create Spark Session
     spark = spark_session()
     # url meetup request
     url_meetup_api = "https://api.meetup.com/2/open_events"
+    csv_zipcode_path = ("../meetup-mongo/data/us-zip-code.csv")
     # get list of events by topic and country
     data = request_event(topic="Python", country="US", url_path=url_meetup_api)
     # Build dataframe
-    df = build_dataframe(spark, data)
+    event = Event(spark, data, geocode)
+    df_event = event.build_df()
+    print(df_event.count())
     # write data into mongodb cluster
     # write_data(df, spark)
+
+    zipcode = Zipcode(spark, csv_zipcode_path)
+    df_zipcode = zipcode.build_df()
+    print(df_zipcode.count())
