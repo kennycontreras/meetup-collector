@@ -1,6 +1,7 @@
-pymongo
+pymongo~=4.2.0
+pandas~=1.4.3
+numpy~=1.23.1
 mongoengine
-pyspak
-request
-json
-opencage 
+requests~=2.28.1
+opencage~=2.0.0
+pyspark~=3.3.0

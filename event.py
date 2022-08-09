@@ -8,27 +8,22 @@ from pyspark.sql import types as T
 from pyspark.sql.functions import udf
 
 
-class Event():
+class Event:
 
-    def __init__(self,
-                 spark,
-                 data,
-                 geocode,
-                 *args, **kwargs):
+    def __init__(self, spark, data, geocode, *args, **kwargs):
         self.spark = spark
         self.data = data
         self.geocode = geocode
 
     def build_df(self, *args, **kwargs):
-        '''
+        """
         Build a SparkDataframe based on json response.
         Args:
             Spark (object): Spark Session
             data (json array): Event data from meetup api
 
-        '''
+        """
 
-        # Columns to build data frame
         columns = ['id', 'date', 'year', 'month', 'day', 'country', 'city', 'state,', 'address',
                    'meetup_name', 'meetup_group_name', 'description', 'event_url', 'yes_rsvp_count', 'status']
         id, date, year, month, day, country, city, state, address, meetup_name, meetup_group_name, description, event_url, yes_rsvp_count, status = ([
@@ -83,20 +78,18 @@ class Event():
             T.StructField("status", T.StringType(), True)
         ])
 
-        # Create pandas DataFrame using numpy.transpose() method
         df_pandas = pd.DataFrame(np.transpose([id, date, year, month, day, country, city, state, address,
                                                meetup_name, meetup_group_name, description, event_url, yes_rsvp_count, status]), columns=columns)
-        # Create Spark DataFrame
+
         df = self.spark.createDataFrame(df_pandas, schema=schema)
 
-        # Upper lambda functions
         upper_udf = udf(lambda x: x.upper())
 
-        # Remove tags from description column
+        # UDF: Remove tags from description column
         @udf
         def remove_tags_udf(text):
             import re
-            TAG_RE = re.compile(r'<[^>]+>')
+            TAG_RE = re.compile(r"<[^>]+>")
             return TAG_RE.sub('', text)
 
         # # Apply udf functions
@@ -105,6 +98,7 @@ class Event():
 
         return df_tags
 
-    def write_df(self, df):
+    @staticmethod
+    def write_df(df):
         df.write.format("com.mongodb.spark.sql.DefaultSource").mode("append").option(
             "database", "meetup").option("collection", "events").save()
